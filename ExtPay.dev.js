@@ -14,7 +14,7 @@ if (typeof window !== 'undefined') {
     }, false);
 }
 
-export default function ExtPay(extension_id, options) {
+export default function ExtPay(extension_id, options = {}) {
 
     const HOST = `http://localhost:3000`
     const EXTENSION_URL = `${HOST}/extension/${extension_id}`

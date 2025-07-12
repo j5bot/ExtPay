@@ -30,9 +30,7 @@
     "url": "https://github.com/Glench/ExtPay/issues"
   },
   "homepage": "https://extensionpay.com",
-  "dependencies": {
-    "webextension-polyfill": "^0.7.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@rollup/plugin-commonjs": "^17.0.0",
     "@rollup/plugin-node-resolve": "^11.0.1",

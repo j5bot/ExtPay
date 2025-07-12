@@ -1,7 +1,5 @@
-import * as browser from 'webextension-polyfill';
-
 // Sign up at https://extensionpay.com to use this library. AGPLv3 licensed.
-
+// WARNING: DON'T USE THIS FILE IN YOUR EXTENSION. USE A FILE FROM THE /dist FOLDER INSTEAD.
 
 // For running as a content script. Receive a message from the successful payments page
 // and pass it on to the background page to query if the user has paid.
@@ -11,12 +9,12 @@ if (typeof window !== 'undefined') {
         if (event.source != window) return;
         if (event.data === 'extpay-fetch-user' || event.data === 'extpay-trial-start') {
             window.postMessage(`${event.data}-received`);
-            browser.runtime.sendMessage(event.data);
+            chrome.runtime.sendMessage(event.data);
         }
     }, false);
 }
 
-function ExtPay(extension_id) {
+function ExtPay(extension_id, options = {}) {
 
     const HOST = `https://extensionpay.com`;
     const EXTENSION_URL = `${HOST}/extension/${extension_id}`;
@@ -26,23 +24,23 @@ function ExtPay(extension_id) {
     }
     async function get(key) {
         try {
-            return await browser.storage.sync.get(key)
+            return await chrome.storage.sync.get(key)
         } catch(e) {
             // if sync not available (like with Firefox temp addons), fall back to local
-            return await browser.storage.local.get(key)
+            return await chrome.storage.local.get(key)
         }
     }
     async function set(dict) {
         try {
-            return await browser.storage.sync.set(dict)
+            return await chrome.storage.sync.set(dict)
         } catch(e) {
             // if sync not available (like with Firefox temp addons), fall back to local
-            return await browser.storage.local.set(dict)
+            return await chrome.storage.local.set(dict)
         }
     }
 
     // ----- start configuration checks
-    browser.management && browser.management.getSelf().then(async (ext_info) => {
+    chrome.management && chrome.management.getSelf().then(async (ext_info) => {
         if (!ext_info.permissions.includes('storage')) {
             var permissions = ext_info.hostPermissions.concat(ext_info.permissions);
             throw `ExtPay Setup Error: please include the "storage" permission in manifest.json["permissions"] or else ExtensionPay won't work correctly.
@@ -75,23 +73,32 @@ You can copy and paste this to your manifest.json file to fix this error:
 
     async function create_key() {
         var body = {};
-        var ext_info;
-        if (browser.management) {
-            ext_info = await browser.management.getSelf();
-        } else if (browser.runtime) {
-            ext_info = await browser.runtime.sendMessage('extpay-extinfo'); // ask background page for ext info
-            if (!ext_info) {
-                // Safari doesn't support browser.management for some reason
-                const is_dev_mode = !('update_url' in browser.runtime.getManifest());
-                ext_info = {installType: is_dev_mode ? 'development' : 'normal'};
+
+        if (options.development) {
+            if (options.development) {
+                body.development = true;
             }
         } else {
-            throw 'ExtPay needs to be run in a browser extension context'
-        }
+            var ext_info;
+            if (chrome.management) {
+                ext_info = await chrome.management.getSelf();
+            } else if (chrome.runtime) {
+                ext_info = await chrome.runtime.sendMessage('extpay-extinfo'); // ask background page for ext info
+                if (!ext_info) {
+                    // Safari doesn't support chrome.management for some reason
+                    const is_dev_mode = !(
+                        'update_url' in chrome.runtime.getManifest()
+                    );
+                    ext_info = { installType: is_dev_mode ? 'development' : 'normal' };
+                }
+            } else {
+                throw 'ExtPay needs to be run in a browser extension context'
+            }
 
-        if (ext_info.installType == 'development') {
-            body.development = true;
-        } 
+            if (ext_info.installType == 'development') {
+                body.development = true;
+            }
+        }
 
         const resp = await fetch(`${EXTENSION_URL}/api/new-key`, {
             method: 'POST',
@@ -183,13 +190,13 @@ You can copy and paste this to your manifest.json file to fix this error:
     }
 
     async function open_popup(url, width, height) {
-        if (browser.windows && browser.windows.create) {
-            const current_window = await browser.windows.getCurrent();
+        if (chrome.windows && chrome.windows.create) {
+            const current_window = await chrome.windows.getCurrent();
             // https://stackoverflow.com/a/68456858
             const left = Math.round((current_window.width - width) * 0.5 + current_window.left);
             const top = Math.round((current_window.height - height) * 0.5 + current_window.top);
             try {
-                browser.windows.create({
+                chrome.windows.create({
                     url: url,
                     type: "popup",
                     focused: true,
@@ -200,7 +207,7 @@ You can copy and paste this to your manifest.json file to fix this error:
                 });
             } catch(e) {
                 // firefox doesn't support 'focused'
-                browser.windows.create({
+                chrome.windows.create({
                     url: url,
                     type: "popup",
                     width,
@@ -209,10 +216,10 @@ You can copy and paste this to your manifest.json file to fix this error:
                     top
                 });
             }
+        } else if (chrome.tabs && chrome.tabs.create) {
+            chrome.tabs.create({ url, active: true });
         } else {
-            // for opening from a content script
-            // https://developer.mozilla.org/en-US/docs/Web/API/Window/open
-            window.open(url, null, `toolbar=no,location=no,directories=no,status=no,menubar=no,width=${width},height=${height},left=450`);
+            open_popup(url, 500, 700);
         }
     }
 
@@ -225,8 +232,8 @@ You can copy and paste this to your manifest.json file to fix this error:
         if (plan_nickname) {
             url = `${EXTENSION_URL}/choose-plan/${plan_nickname}?api_key=${api_key}`;
         }
-        if (browser.tabs && browser.tabs.create) {
-            await browser.tabs.create({url, active: true});
+        if (chrome.tabs && chrome.tabs.create) {
+            await chrome.tabs.create({url, active: true});
         } else {
             window.open(url, '_blank');
         }
@@ -285,7 +292,7 @@ You can copy and paste this to your manifest.json file to fix this error:
             "js": ["ExtPay.js"],
             "run_at": "document_start"
         }]`;
-                const manifest = browser.runtime.getManifest();
+                const manifest = chrome.runtime.getManifest();
                 if (!manifest.content_scripts) {
                     throw `ExtPay setup error: To use the onPaid callback handler, please include ExtPay as a content script in your manifest.json. You can copy the example below into your manifest.json or check the docs: https://github.com/Glench/ExtPay#2-configure-your-manifestjson
 
@@ -314,16 +321,22 @@ You can copy and paste this to your manifest.json file to fix this error:
             // }
         },
         getPlans: get_plans,
-        openPaymentPage: open_payment_page,
-        openTrialPage: open_trial_page,
-        openLoginPage: open_login_page,
+        openPaymentPage: function () {
+            chrome.runtime.sendMessage('extpay-open-payment-page');
+        },
+        openTrialPage: function () {
+            chrome.runtime.sendMessage('extpay-open-trial-page');
+        },
+        openLoginPage: function () {
+            chrome.runtime.sendMessage('extpay-open-login-page');
+        },
         onTrialStarted: {
             addListener: function(callback) {
                 trial_callbacks.push(callback);
             }
         },
         startBackground: function() {
-            browser.runtime.onMessage.addListener(function(message, sender, send_response) {
+            chrome.runtime.onMessage.addListener(function(message, sender, send_response) {
                 if (message == 'extpay-fetch-user') {
                     // Only called via extensionpay.com/extension/[extension-id]/paid -> content_script when user successfully pays.
                     // It's possible attackers could trigger this but that is basically harmless. It would just query the user.
@@ -331,10 +344,16 @@ You can copy and paste this to your manifest.json file to fix this error:
                 } else if (message == 'extpay-trial-start') {
                     // no need to poll since the trial confirmation page has already set trialStartedAt
                     fetch_user(); 
-                } else if (message == 'extpay-extinfo' && browser.management) {
-                    // get this message from content scripts which can't access browser.management
-                    return browser.management.getSelf()
-                } 
+                } else if (message == 'extpay-extinfo' && chrome.management) {
+                    // get this message from content scripts which can't access chrome.management
+                    return chrome.management.getSelf()
+                } else if (message == 'extpay-open-payment-page') {
+                    open_payment_page();
+                } else if (message == 'extpay-open-trial-page') {
+                    open_trial_page();
+                } else if (message == 'extpay-open-login-page') {
+                    open_login_page();
+                }
             });
         }
     }
