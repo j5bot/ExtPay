@@ -41,6 +41,11 @@ export default [
         output: [{
             file: 'dist/ExtPay.browser.js',
             name: 'ExtPay'
+        },
+        {
+            file: 'sample-browser/ExtPay.browser.js',
+            format: 'iife',
+            name: 'ExtPayBrowser'
         }],
         plugins: [
             replace({
